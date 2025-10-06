@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
@@ -84,10 +83,25 @@ export default function CreateProfile() {
     setLoading(true);
 
     try {
-      // Upload logo to Firebase Storage
-      const logoRef = ref(storage, `logos/${user.uid}/${Date.now()}_${logoFile.name}`);
-      await uploadBytes(logoRef, logoFile);
-      const logoUrl = await getDownloadURL(logoRef);
+      // Upload logo to Cloudinary
+      const formData = new FormData();
+      formData.append('file', logoFile);
+      formData.append('upload_preset', 'ratehere');
+      
+      const cloudinaryResponse = await fetch(
+        'https://api.cloudinary.com/v1_1/djlrarljg/image/upload',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      
+      if (!cloudinaryResponse.ok) {
+        throw new Error('Failed to upload image');
+      }
+      
+      const cloudinaryData = await cloudinaryResponse.json();
+      const logoUrl = cloudinaryData.secure_url;
 
       // Create profile document in Firestore
       const finalSector = sector === 'Other' ? customSector : sector;
