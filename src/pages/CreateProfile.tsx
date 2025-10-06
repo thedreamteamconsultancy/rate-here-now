@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { collection, addDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
@@ -19,7 +19,8 @@ const SECTORS = [
 ];
 
 const SOCIAL_PLATFORMS = [
-  'Instagram', 'Facebook', 'Twitter', 'YouTube', 'LinkedIn', 'TikTok'
+  'Facebook', 'YouTube', 'Instagram', 'WhatsApp', 'LinkedIn', 
+  'Telegram', 'Snapchat', 'X', 'PlayStore', 'Website'
 ];
 
 interface SocialLink {
@@ -29,8 +30,10 @@ interface SocialLink {
 
 export default function CreateProfile() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(!!id);
   
   const [name, setName] = useState('');
   const [sector, setSector] = useState('');
@@ -40,6 +43,48 @@ export default function CreateProfile() {
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [caption, setCaption] = useState('Follow and Rate Us on RateHere!');
+
+  const isEditMode = !!id;
+
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchProfile = async () => {
+      try {
+        const docRef = doc(db, 'profiles', id);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          
+          // Check if user owns this profile
+          if (data.createdBy !== user?.uid) {
+            toast.error('You do not have permission to edit this profile');
+            navigate('/dashboard');
+            return;
+          }
+          
+          setName(data.name || '');
+          setSector(data.sector || '');
+          setDescription(data.description || '');
+          setLogoPreview(data.logoUrl || '');
+          setSocialLinks(data.socialLinks || []);
+          setCaption(data.caption || 'Follow and Rate Us on RateHere!');
+        } else {
+          toast.error('Profile not found');
+          navigate('/dashboard');
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        toast.error('Failed to load profile');
+        navigate('/dashboard');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [id, user, navigate]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -75,7 +120,7 @@ export default function CreateProfile() {
       return;
     }
 
-    if (!name || !sector || !logoFile) {
+    if (!name || !sector || (!logoFile && !logoPreview)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -83,45 +128,61 @@ export default function CreateProfile() {
     setLoading(true);
 
     try {
-      // Upload logo to Cloudinary
-      const formData = new FormData();
-      formData.append('file', logoFile);
-      formData.append('upload_preset', 'ratehere');
-      
-      const cloudinaryResponse = await fetch(
-        'https://api.cloudinary.com/v1_1/djlrarljg/image/upload',
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-      
-      if (!cloudinaryResponse.ok) {
-        throw new Error('Failed to upload image');
-      }
-      
-      const cloudinaryData = await cloudinaryResponse.json();
-      const logoUrl = cloudinaryData.secure_url;
+      let logoUrl = logoPreview;
 
-      // Create profile document in Firestore
+      // Upload logo to Cloudinary only if a new file was selected
+      if (logoFile) {
+        const formData = new FormData();
+        formData.append('file', logoFile);
+        formData.append('upload_preset', 'ratehere');
+        
+        const cloudinaryResponse = await fetch(
+          'https://api.cloudinary.com/v1_1/djlrarljg/image/upload',
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+        
+        if (!cloudinaryResponse.ok) {
+          throw new Error('Failed to upload image');
+        }
+        
+        const cloudinaryData = await cloudinaryResponse.json();
+        logoUrl = cloudinaryData.secure_url;
+      }
+
+      // Create or update profile document in Firestore
       const finalSector = sector === 'Other' ? customSector : sector;
       const validSocialLinks = socialLinks.filter(link => link.platform && link.url);
 
-      await addDoc(collection(db, 'profiles'), {
+      const profileData = {
         name,
         sector: finalSector,
         description,
         logoUrl,
         socialLinks: validSocialLinks,
         caption,
-        createdBy: user.uid,
-        createdAt: new Date(),
-        rating: 0,
-        ratingCount: 0,
-        totalRatingValue: 0,
-      });
+      };
 
-      toast.success('Profile created successfully!');
+      if (isEditMode && id) {
+        await updateDoc(doc(db, 'profiles', id), {
+          ...profileData,
+          updatedAt: new Date(),
+        });
+        toast.success('Profile updated successfully!');
+      } else {
+        await addDoc(collection(db, 'profiles'), {
+          ...profileData,
+          createdBy: user.uid,
+          createdAt: new Date(),
+          rating: 0,
+          ratingCount: 0,
+          totalRatingValue: 0,
+        });
+        toast.success('Profile created successfully!');
+      }
+
       navigate('/dashboard');
     } catch (error) {
       console.error('Error creating profile:', error);
@@ -131,6 +192,20 @@ export default function CreateProfile() {
     }
   };
 
+  if (initialLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto max-w-7xl px-4 pt-24 flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="mt-4 text-muted-foreground">Loading profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -138,9 +213,11 @@ export default function CreateProfile() {
       <div className="container mx-auto max-w-4xl px-4 pt-24 pb-12">
         <div className="space-y-8 animate-fade-in">
           <div className="text-center space-y-2">
-            <h1 className="text-4xl font-bold text-foreground">Create Your Profile</h1>
+            <h1 className="text-4xl font-bold text-foreground">
+              {isEditMode ? 'Edit Your Profile' : 'Create Your Profile'}
+            </h1>
             <p className="text-lg text-muted-foreground">
-              Share your story and let the community rate you
+              {isEditMode ? 'Update your information' : 'Share your story and let the community rate you'}
             </p>
           </div>
 
@@ -309,7 +386,7 @@ export default function CreateProfile() {
                 disabled={loading}
                 className="flex-1"
               >
-                {loading ? 'Creating...' : 'Create Profile'}
+                {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Profile' : 'Create Profile')}
               </Button>
             </div>
           </form>

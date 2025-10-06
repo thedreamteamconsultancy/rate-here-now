@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Linkedin, Twitter, Youtube, Globe } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Twitter, Youtube, Globe, MessageCircle, Send, Camera, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface SocialLink {
@@ -17,7 +17,13 @@ const getPlatformIcon = (platform: string) => {
     instagram: Instagram,
     linkedin: Linkedin,
     twitter: Twitter,
+    x: Twitter,
     youtube: Youtube,
+    whatsapp: MessageCircle,
+    telegram: Send,
+    snapchat: Camera,
+    playstore: ShoppingBag,
+    website: Globe,
   };
   return icons[platform.toLowerCase()] || Globe;
 };

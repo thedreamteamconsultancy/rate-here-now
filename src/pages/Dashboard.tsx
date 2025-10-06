@@ -8,7 +8,7 @@ import Navigation from '@/components/Navigation';
 import ProfileCard from '@/components/ProfileCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -160,7 +160,18 @@ export default function Dashboard() {
               {profiles.map((profile) => (
                 <div key={profile.id} className="relative group">
                   <ProfileCard {...profile} />
-                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="bg-background/95 backdrop-blur hover:bg-primary hover:text-primary-foreground"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigate(`/edit-profile/${profile.id}`);
+                      }}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
                     <Button
                       size="icon"
                       variant="destructive"
